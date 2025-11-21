@@ -10,6 +10,7 @@ from cryptography.fernet import Fernet
 import yt_dlp
 from faster_whisper import WhisperModel
 import ollama
+from newspaper import Article
 
 # --- CONFIG ---
 load_dotenv()
@@ -55,6 +56,19 @@ def get_video_info(url):
             return info.get("duration", 0), info.get("title", "Unknown")
     except Exception:
         return 0, "Unknown"
+
+
+def extract_article_text(url):
+    """NEW: Scrapes text from blogs/news sites."""
+    try:
+        logging.info(f"📰 Attempting to read article: {url}")
+        article = Article(url)
+        article.download()
+        article.parse()
+        return article.text
+    except Exception as e:
+        logging.error(f"Article extraction failed: {e}")
+        return None
 
 
 def process_media(url):
@@ -116,30 +130,30 @@ def extract_visual_context(video_path):
     return "\n".join(visual_data)
 
 
-def generate_generic_report(audio, visual):
+def generate_generic_report(content_text, visual_context):
     """
-    Universal Prompt: Handles Cooking, Tech, Travel, Advice, etc.
+    Universal Prompt: Handles Video Transcripts AND Article Text.
     """
     prompt = f"""
-    Analyze this Instagram Reel/Shorts content.
+    Analyze this content (Video Transcript or Article Text).
     
     SOURCE DATA:
-    Audio: {audio}
-    Visuals: {visual}
+    Main Content / Audio: {content_text} 
+    Visuals (If Video): {visual_context}
     
     TASK:
-    1. Identify the category (e.g., Food, Tech, Travel, Motivation, Humor).
+    1. Identify the category (e.g., News, Food, Tech, Travel, Opinion).
     2. Extract the core value.
     
     OUTPUT FORMAT (Strict):
     
-    **One-Line Overview:** (What is this video about?)
+    **One-Line Overview:** (What is this about?)
     
-    **Key Takeaways:**
-    (Bullet points of the main steps, ingredients, tips, or locations mentioned).
+    **Summary:**
+    (A concise paragraph summarizing the main points).
     
-    **Hidden Details / Actionable Info:**
-    (Any prices, addresses, specific settings, software names, or warnings shown on screen but not spoken).
+    **Key Takeaways / Details:**
+    (Bullet points of the main steps, facts, arguments, or tips mentioned).
     """
     try:
         response = ollama.chat(
@@ -188,27 +202,38 @@ def main():
                 final_msg = ""
 
                 if "http" in content:
-                    # 1. Check Duration FIRST
+                    # 1. Check Duration FIRST (Is it a Video?)
                     duration, title = get_video_info(content)
 
-                    if duration > MAX_VIDEO_DURATION:
-                        final_msg = "⚠️ **Video too long.**\nMindFrame is optimized for Shorts/Reels (< 3 mins). Please send a shorter clip."
-                    else:
-                        # 2. Process
-                        video_path = process_media(content)
-                        if video_path:
-                            try:
-                                audio_text = extract_audio_text(video_path)
-                                visual_text = extract_visual_context(video_path)
-                                final_msg = generate_generic_report(
-                                    audio_text, visual_text
-                                )
-                            except Exception as e:
-                                final_msg = f"Processing Error: {str(e)}"
-                            finally:
-                                cleanup()  # Crucial: Delete video now
+                    if duration > 0:
+                        # --- IT IS A VIDEO ---
+                        if duration > MAX_VIDEO_DURATION:
+                            final_msg = "⚠️ **Video too long.**\nMindFrame is optimized for Shorts/Reels (< 3 mins). Please send a shorter clip."
                         else:
-                            final_msg = "Error: Could not download video."
+                            # Process Video
+                            video_path = process_media(content)
+                            if video_path:
+                                try:
+                                    audio_text = extract_audio_text(video_path)
+                                    visual_text = extract_visual_context(video_path)
+                                    final_msg = generate_generic_report(
+                                        audio_text, visual_text
+                                    )
+                                except Exception as e:
+                                    final_msg = f"Processing Error: {str(e)}"
+                                finally:
+                                    cleanup()
+                            else:
+                                final_msg = "Error: Could not download video."
+                    else:
+                        # --- IT IS NOT A VIDEO (Try Article) ---
+                        article_text = extract_article_text(content)
+                        if article_text:
+                            final_msg = generate_generic_report(
+                                article_text, "No Visuals (Text Article)"
+                            )
+                        else:
+                            final_msg = "❌ Error: Link is not a valid video or readable article."
                 else:
                     # Text Input
                     final_msg = generate_generic_report(content, "None")
