@@ -26,7 +26,7 @@ cipher = Fernet(os.getenv("MASTER_KEY").encode())
 # --- MODELS ---
 print("⏳ Loading Whisper...")
 whisper_model = WhisperModel("small", device="cpu", compute_type="int8")
-print("✅ Models Ready.")
+print("✅ Model Ready.")
 
 
 # --- HEARTBEAT (Background Thread) ---
