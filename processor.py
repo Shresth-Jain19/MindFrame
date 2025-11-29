@@ -289,7 +289,7 @@ def generate_final_report(audio, visual, content_type="video"):
         return "Error generating report."
 
 
-# --- 3. MAIN LOOP (Sequential = Low RAM) ---
+# --- 3. MAIN LOOP ---
 def main():
     print("🚀 MindFrame Online")
     cleanup()

@@ -92,11 +92,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Lists the last 5 summaries with preview."""
+    """Lists the last 20 summaries with preview."""
     user = update.effective_user
     sb = await get_supabase()
 
-    # Fetch last 5 'done' or 'archived' tasks that have summaries
+    # Fetch last 20 'done' or 'archived' tasks that have summaries
     res = (
         await sb.table("tasks")
         .select("id, content, encrypted_summary, task_number, created_at")
@@ -105,7 +105,7 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
         .not_.in_("content", ["START_EVENT", "GREETING_EVENT"])
         .not_.is_("encrypted_summary", "null")
         .order("created_at", desc=True)
-        .limit(5)
+        .limit(20)
         .execute()
     )
 
@@ -195,11 +195,11 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else task["content"]
             )
 
+            # Don't use parse_mode for AI-generated content to avoid parsing errors
             await update.message.reply_text(
                 f"📄 Summary #{task_num} (ID: {task_id})\n\n"
                 f"Source: {content_preview}\n\n"
                 f"{decrypted}",
-                parse_mode="Markdown",
             )
         except Exception as e:
             logging.error(f"Error decrypting summary: {e}")
@@ -334,10 +334,10 @@ async def check_results(context: ContextTypes.DEFAULT_TYPE):
                             icon = "❌"
 
                         # Send message to user
+                        # Don't use parse_mode for AI-generated content to avoid parsing errors
                         await context.bot.send_message(
                             chat_id=task["user_id"],
                             text=f"{icon} MindFrame Result:\n\n{decrypted}",
-                            parse_mode="Markdown",
                         )
 
                         # Update status to 'archived' after successful delivery
